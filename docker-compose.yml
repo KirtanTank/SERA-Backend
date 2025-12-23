@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: sera-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      - redis
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+  redis:
+    image: redis:7
+    container_name: sera-redis
+    ports:
+      - "6379:6379"
