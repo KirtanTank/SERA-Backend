@@ -7,5 +7,8 @@ sera = SERA()
 
 @router.post("/chat", response_model=SeraResponse)
 def chat(payload: UserInput):
-    response = sera.respond(payload.message)
-    return {"response": response}
+    reply = sera.respond(
+        payload.message,
+        payload.session_id
+    )
+    return {"response": reply}
