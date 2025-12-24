@@ -48,3 +48,16 @@ class ConversationMemory:
         self.redis.delete(self._conversation_key(session_id))
         for msg in messages:
             self.redis.rpush(self._conversation_key(session_id), msg)
+def set_pending_action(self, session_id: str, action: dict):
+    self.redis.set(
+        f"sera:pending:{session_id}",
+        json.dumps(action),
+        ex=300  # 5 minutes
+    )
+
+def get_pending_action(self, session_id: str):
+    data = self.redis.get(f"sera:pending:{session_id}")
+    return json.loads(data) if data else None
+
+def clear_pending_action(self, session_id: str):
+    self.redis.delete(f"sera:pending:{session_id}")

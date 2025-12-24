@@ -1,11 +1,14 @@
+import json
 from src.ai.sentiment import analyze_sentiment
 from src.core.memory import ConversationMemory
 from src.core.vector_memory import VectorMemory
-from src.ai.llm import generate_response
-from src.ai.summarizer import summarize_conversation
+from src.ai.llm import call_llm
+from src.tools.executor import execute_tool
+import src.tools  # registers tools
 
-MAX_MESSAGES = 6
-SUMMARY_TRIGGER = 10
+CONFIRMATION_REQUIRED_TOOLS = {"send_email", "create_calendar_event"}
+CONFIRMATION_APPROVAL_ANSWERS = {"yes", "confirm", "go ahead", "proceed", "sure", "do it", "okay", "ok", "yup"}
+CONFIRMATION_REJECTED_ANSWERS = {"no", "cancel", "stop", "don't", "do not", "nope", "leave it", "nay"}
 
 class SERA:
     def __init__(self):
@@ -13,46 +16,100 @@ class SERA:
         self.vector_memory = VectorMemory()
 
     def respond(self, message: str, session_id: str) -> str:
+        pending = self.memory.get_pending_action(session_id)
+
+        if pending:
+            if message.lower() in CONFIRMATION_APPROVAL_ANSWERS:
+                tool_name = pending["tool_call"]["name"]
+                arguments = pending["tool_call"]["arguments"]
+
+                tool_result = execute_tool(
+                    type(
+                        "ToolCall",
+                        (),
+                        {
+                            "function": type(
+                                "Func", (), {"name": tool_name, "arguments": arguments}
+                            )
+                        },
+                    )
+                )
+
+                self.memory.clear_pending_action(session_id)
+                return f"✅ Done. Result:\n{tool_result}"
+
+            if message.lower() in CONFIRMATION_REJECTED_ANSWERS:
+                self.memory.clear_pending_action(session_id)
+                return "❌ Okay, I have cancelled that action."
+
         sentiment = analyze_sentiment(message)
 
         messages = self.memory.get_messages(session_id)
-        summary = self.memory.get_summary(session_id)
+        summary = self.memory.get_summary(session_id) or ""
 
-        # 🔹 Summarize if needed
-        if len(messages) >= SUMMARY_TRIGGER:
-            new_summary = summarize_conversation(
-                previous_summary=summary,
-                messages=messages[:-MAX_MESSAGES]
+        context = "\n".join([f"{m['role']}: {m['content']}" for m in messages[-6:]])
+
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You are SERA, a Smart Emotional Reasoning Assistant.\n"
+                    "Use tools when needed to answer accurately.\n"
+                    "Be empathetic based on user sentiment."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Sentiment: {sentiment}\n"
+                    f"Summary: {summary}\n"
+                    f"Recent conversation:\n{context}\n\n"
+                    f"User says: {message}"
+                ),
+            },
+        ]
+
+        response = call_llm(prompt)
+
+        msg = response.choices[0].message
+
+        if msg.tool_calls:
+            tool_call = msg.tool_calls[0]
+            tool_name = tool_call.function.name
+
+            arguments = json.loads(tool_call.function.arguments)
+
+            # 🔒 Step 1: Check if confirmation needed
+            if tool_name in CONFIRMATION_REQUIRED_TOOLS:
+                self.memory.set_pending_action(
+                    session_id,
+                    {
+                        "tool_call": {
+                            "name": tool_name,
+                            "arguments": tool_call.function.arguments,
+                        }
+                    },
+                )
+
+                return (
+                    f"I'm about to **{tool_name.replace('_', ' ')}**.\n"
+                    f"Do you want me to proceed? (yes / no)"
+                )
+
+            # ✅ Safe tools execute immediately
+            tool_result = execute_tool({
+                **arguments,
+                "user_id": user_id
+            })
+
+            prompt.append(msg)
+            prompt.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": str(tool_result),
+                }
             )
 
-            self.memory.save_summary(session_id, new_summary)
-            self.memory.trim_messages(session_id, MAX_MESSAGES)
-            messages = self.memory.get_messages(session_id)
-            summary = new_summary
-
-        # 🔹 Build short-term memory
-        short_memory = "\n".join(
-            [f"{m['role']}: {m['content']}" for m in messages]
-        )
-
-        # 🔹 Long-term memory
-        long_memory = self.vector_memory.search(message)
-
-        reply = generate_response(
-            user_message=message,
-            sentiment=sentiment,
-            short_memory=f"{summary or ''}\n{short_memory}",
-            long_memory=long_memory,
-        )
-
-        if self._is_important(message):
-            self.vector_memory.add(message)
-
-        self.memory.add(session_id, "user", message)
-        self.memory.add(session_id, "assistant", reply)
-
-        return reply
-
-    def _is_important(self, message: str) -> bool:
-        keywords = ["remember", "i like", "i prefer", "my", "always", "never"]
-        return any(k in message.lower() for k in keywords)
+            final_response = call_llm(prompt)
+            reply = final_response.choices[0].message.content
