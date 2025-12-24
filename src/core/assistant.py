@@ -8,7 +8,7 @@ from src.core.profile import UserProfile
 import re
 from src.ai.llm import stream_llm
 
-CONFIRMATION_REQUIRED_TOOLS = {"send_email", "create_calendar_event"}
+CONFIRMATION_REQUIRED_TOOLS = {"send_email", "create_calendar_event", "create_reminder"}
 CONFIRMATION_APPROVAL_ANSWERS = {
     "yes",
     "confirm",
