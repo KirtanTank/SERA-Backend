@@ -4,7 +4,11 @@ TOOLS_SCHEMA = [
         "function": {
             "name": "get_current_time",
             "description": "Get the current system time",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -16,6 +20,7 @@ TOOLS_SCHEMA = [
                 "type": "object",
                 "properties": {"city": {"type": "string", "description": "City name"}},
                 "required": ["city"],
+                "additionalProperties": False,
             },
         },
     },
@@ -24,7 +29,11 @@ TOOLS_SCHEMA = [
         "function": {
             "name": "list_calendar_events",
             "description": "List upcoming Google Calendar events",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -42,6 +51,7 @@ TOOLS_SCHEMA = [
                     },
                 },
                 "required": ["location"],
+                "additionalProperties": False,
             },
         },
     },
@@ -58,6 +68,7 @@ TOOLS_SCHEMA = [
                     "body": {"type": "string"},
                 },
                 "required": ["to", "subject", "body"],
+                "additionalProperties": False,
             },
         },
     },
@@ -79,6 +90,7 @@ TOOLS_SCHEMA = [
                     },
                 },
                 "required": ["message", "run_at"],
+                "additionalProperties": False,
             },
         },
     },

@@ -20,6 +20,9 @@ class ConversationMemory:
     def _summary_key(self, session_id: str) -> str:
         return f"sera:summary:{session_id}"
 
+    def _pending_key(self, session_id: str) -> str:
+        return f"sera:pending:{session_id}"
+
     def add(self, session_id: str, role: str, content: str):
         message = {"role": role, "content": content}
         self.redis.rpush(
@@ -48,16 +51,20 @@ class ConversationMemory:
         self.redis.delete(self._conversation_key(session_id))
         for msg in messages:
             self.redis.rpush(self._conversation_key(session_id), msg)
-def set_pending_action(self, session_id: str, action: dict):
-    self.redis.set(
-        f"sera:pending:{session_id}",
-        json.dumps(action),
-        ex=300  # 5 minutes
-    )
+        self.redis.expire(self._conversation_key(session_id), 3600)
 
-def get_pending_action(self, session_id: str):
-    data = self.redis.get(f"sera:pending:{session_id}")
-    return json.loads(data) if data else None
+    # ✅ Pending action methods (NOW INSIDE CLASS)
 
-def clear_pending_action(self, session_id: str):
-    self.redis.delete(f"sera:pending:{session_id}")
+    def set_pending_action(self, session_id: str, action: dict):
+        self.redis.set(
+            self._pending_key(session_id),
+            json.dumps(action),
+            ex=300  # 5 minutes
+        )
+
+    def get_pending_action(self, session_id: str):
+        data = self.redis.get(self._pending_key(session_id))
+        return json.loads(data) if data else None
+
+    def clear_pending_action(self, session_id: str):
+        self.redis.delete(self._pending_key(session_id))
